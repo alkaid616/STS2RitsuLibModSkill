@@ -8,6 +8,47 @@
 
 STS2RitsuLibMod 是一个 Claude Code Skill，帮助 Mod 开发者快速查找和参考游戏原版代码、RitsuLib API 以及 Mod 开发教程。内置索引开箱即用，无需额外配置即可开始查询。
 
+## 安装
+
+### 方式一：克隆仓库
+
+```bash
+git clone https://github.com/your-username/STS2RitsuLibModSkill.git ~/.claude/skills/STS2RitsuLibModSkill
+```
+
+### 方式二：手动安装
+
+1. 下载本仓库并解压到 Claude Code skills 目录：
+   - Windows: `%USERPROFILE%\.claude\skills\STS2RitsuLibModSkill\`
+   - macOS/Linux: `~/.claude/skills/STS2RitsuLibModSkill/`
+
+2. 安装前提条件：
+
+```bash
+# Windows (使用 winget)
+winget install Microsoft.PowerShell
+winget install Microsoft.DotNet.SDK.8
+
+# macOS
+brew install powershell
+brew install dotnet
+
+# Ubuntu/Debian
+sudo apt-get install -y powershell dotnet-sdk-8.0
+```
+
+3. 首次使用时运行初始化（可选，会自动获取 RitsuLib 和教程）：
+
+```powershell
+pwsh ~/.claude/skills/STS2RitsuLibModSkill/scripts/init-skill.ps1
+```
+
+### 验证安装
+
+在 Claude Code 中输入以下提示词测试：
+
+> 帮我找一下"磨蚀"这张卡牌的实现代码
+
 ## 跨平台支持
 
 | 平台 | 状态 | 说明 |
@@ -191,6 +232,7 @@ STS2RitsuLibModSkill/
 ├── README.md                          # 中文说明
 ├── README.en.md                       # 英文说明
 ├── SKILL.md                           # Skill 核心文档
+├── LICENSE                            # MIT 许可证
 ├── config.json                        # 全局配置
 ├── .gitignore
 ├── indexes/                           # 内置索引（提交到 Git）

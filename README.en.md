@@ -8,6 +8,47 @@ A universal skill for **Slay the Spire 2 + RitsuLib** mod development, providing
 
 STS2RitsuLibMod is a Claude Code Skill that helps mod developers quickly find and reference game source code, RitsuLib APIs, and modding tutorials. Built-in indexes work out of the box without additional configuration.
 
+## Installation
+
+### Option 1: Clone Repository
+
+```bash
+git clone https://github.com/your-username/STS2RitsuLibModSkill.git ~/.claude/skills/STS2RitsuLibModSkill
+```
+
+### Option 2: Manual Installation
+
+1. Download and extract this repository to Claude Code skills directory:
+   - Windows: `%USERPROFILE%\.claude\skills\STS2RitsuLibModSkill\`
+   - macOS/Linux: `~/.claude/skills/STS2RitsuLibModSkill/`
+
+2. Install prerequisites:
+
+```bash
+# Windows (using winget)
+winget install Microsoft.PowerShell
+winget install Microsoft.DotNet.SDK.8
+
+# macOS
+brew install powershell
+brew install dotnet
+
+# Ubuntu/Debian
+sudo apt-get install -y powershell dotnet-sdk-8.0
+```
+
+3. Run initialization (optional, auto-fetches RitsuLib and tutorials):
+
+```powershell
+pwsh ~/.claude/skills/STS2RitsuLibModSkill/scripts/init-skill.ps1
+```
+
+### Verify Installation
+
+Test with this prompt in Claude Code:
+
+> Find the implementation code for the card "Abrasive"
+
 ## Cross-Platform Support
 
 | Platform | Status | Notes |
@@ -191,6 +232,7 @@ STS2RitsuLibModSkill/
 ├── README.md                          # Chinese documentation
 ├── README.en.md                       # English documentation
 ├── SKILL.md                           # Skill core documentation
+├── LICENSE                            # MIT License
 ├── config.json                        # Global configuration
 ├── .gitignore
 ├── indexes/                           # Built-in indexes (committed to Git)
