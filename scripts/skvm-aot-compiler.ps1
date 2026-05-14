@@ -458,7 +458,7 @@ function Invoke-DAGExtraction {
 
     $stepIndex = 0
     foreach ($group in $parallelGroups) {
-        $groupSteps = @()
+        $groupNodeIds = @()
         foreach ($nodeId in $group) {
             $node = $dag[$nodeId]
             $capId = $node.capability
@@ -476,12 +476,12 @@ function Invoke-DAGExtraction {
             }
 
             $plan.steps += $step
-            $groupSteps += $stepIndex
+            $groupNodeIds += $nodeId
             $stepIndex++
         }
 
-        if ($groupSteps.Count -gt 1) {
-            $plan.parallelGroups += $groupSteps
+        if ($groupNodeIds.Count -gt 1) {
+            $plan.parallelGroups += , $groupNodeIds
         }
     }
 
@@ -614,17 +614,39 @@ $binding = Invoke-EnvironmentBinding -Manifest $manifest -Profile $profile
 # Step 3: DAG 提取
 $plan = Invoke-DAGExtraction -Manifest $manifest -Binding $binding
 
-# 生成编译变体
+# 生成编译变体（统一格式：executionPlan.orderedSteps）
+$executionPlan = @{
+    orderedSteps = $plan.steps
+    parallelGroups = $plan.parallelGroups
+    cacheableSteps = @()
+}
+
+# 标记可缓存步骤
+foreach ($step in $plan.steps) {
+    $capId = $step.capability
+    $cap = $manifest.capabilities | Where-Object { $_.id -eq $capId }
+    if ($cap -and ($cap.cachePolicy -eq "solidify-after-5" -or $cap.cachePolicy -eq "solidify-after-3")) {
+        $executionPlan.cacheableSteps += $step.nodeId
+    }
+}
+
 $variant = @{
     skvmVersion = $manifest.skvmVersion
     skillVersion = $manifest.version
     timestamp = (Get-Date -Format "o")
     platform = $profile.platform
-    profile = $profile
-    binding = $binding
-    plan = $plan
-    cachePolicy = $manifest.solidification
-    recompilationPolicy = $manifest.recompilation
+    environment = @{
+        pwsh = $profile.probes["pwsh"].available
+        dotnet = $profile.probes["dotnet-sdk"].available
+        git = $profile.probes["git"].available
+        ilspycmd = $profile.probes["ilspycmd"].available
+        network = $profile.probes["network"].available
+        steam = $profile.probes["steam-install"].available
+    }
+    capabilities = $binding.capabilities
+    executionPlan = $executionPlan
+    solidification = $manifest.solidification
+    recompilation = $manifest.recompilation
 }
 
 # 保存编译结果
@@ -655,7 +677,7 @@ Write-Host "  平台: $($profile.platform)" -ForegroundColor Gray
 Write-Host "  探针: $($profile.summary.available)/$($profile.summary.totalProbes) 可用" -ForegroundColor Gray
 Write-Host "  关键探针: $($profile.summary.critical.passed)/$($profile.summary.critical.total) 通过" -ForegroundColor Gray
 Write-Host "  修复脚本: $($binding.fixScripts.Count) 个" -ForegroundColor Gray
-Write-Host "  执行步骤: $($plan.steps.Count) 个" -ForegroundColor Gray
+Write-Host "  执行步骤: $($executionPlan.orderedSteps.Count) 个" -ForegroundColor Gray
 
 Write-Host "`n输出文件：" -ForegroundColor Cyan
 Write-Host "  能力画像: $profilePath" -ForegroundColor Gray

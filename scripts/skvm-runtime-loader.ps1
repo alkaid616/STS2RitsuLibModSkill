@@ -221,7 +221,7 @@ function Invoke-Step {
     }
 
     try {
-        if ($Step.implementation -eq "primary") {
+        if ($Step.available -ne $false) {
             # 主实现路径
             $output = Invoke-PrimaryStep -Step $Step -Variant $Variant
             $result.success = $true
@@ -451,7 +451,7 @@ if ($DryRun) {
     Write-Host ("=" * 50) -ForegroundColor DarkGray
 
     foreach ($step in $taskSteps) {
-        $impl = if ($step.implementation -eq "primary") { "PRIMARY" } else { "FALLBACK:$($step.fallback)" }
+        $impl = if ($step.available -ne $false) { "PRIMARY" } else { "FALLBACK:$($step.fallback)" }
         $solidified = Test-Solidified -NodeId $step.nodeId -Variant $variant
         $cacheStatus = if ($solidified) { " [CACHED]" } else { "" }
         Write-Host "  $($step.nodeId) [$impl]$cacheStatus" -ForegroundColor Gray
