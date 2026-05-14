@@ -29,6 +29,85 @@
 4. **Mod 脚手架**：基于 RitsuLib 模板生成 Mod 项目结构
 5. **项目创建**：使用 NuGet 模板 `STS2.RitsuLib.ModTemplate` 创建标准 Mod 项目
 
+## SkVM 架构（Skill Virtual Machine）
+
+本 Skill 采用 SkVM 架构，将 Skill 视为**自然语言程序**而非静态提示词。SkVM 分为两阶段：
+
+### AOT 编译阶段（安装/初始化时）
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   AOT Compile Phase                  │
+│  ┌──────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │ Capability│  │  Environment │  │      DAG      │  │
+│  │ Profiler  │  │    Binder    │  │   Extractor   │  │
+│  └────┬─────┘  └──────┬───────┘  └───────┬───────┘  │
+│       └───────────┬────┴──────────────────┘          │
+│                   ▼                                   │
+│          ┌────────────────┐                           │
+│          │    Variant     │                           │
+│          │   Generator    │                           │
+│          └───────┬────────┘                           │
+└──────────────────┼───────────────────────────────────┘
+```
+
+1. **能力画像**：运行环境探针（PowerShell、.NET SDK、Git、ilspycmd、Steam、网络），记录可用性和版本
+2. **环境绑定**：检查依赖，为缺失项生成幂等修复脚本
+3. **DAG 提取**：将工作流拆分为有向无环图，识别并行机会
+
+### JIT 运行时阶段（任务执行时）
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  JIT Runtime Phase                     │
+│  ┌──────────┐  ┌──────────────┐  ┌───────────────┐   │
+│  │ Variant  │  │  Execution   │  │   Feedback    │   │
+│  │  Loader  │──▶   Monitor    │──▶   Collector   │   │
+│  └──────────┘  └──────────────┘  └───────┬───────┘   │
+│                                          │            │
+│                    ┌─────────────────────┘            │
+│                    ▼                                   │
+│          ┌────────────────┐                           │
+│          │  Adaptive      │                           │
+│          │  Recompiler    │                           │
+│          └────────────────┘                           │
+└──────────────────────────────────────────────────────┘
+```
+
+1. **变体加载**：加载针对当前环境编译好的执行计划
+2. **执行监控**：按 DAG 顺序执行，失败时尝试回退链
+3. **反馈收集**：分析执行日志，检测失败模式
+4. **自适应重编译**：连续失败 3 次触发环境重探针
+5. **代码固化**：连续成功 5 次的步骤结果被缓存，后续调用跳过 LLM 推理
+
+### SkVM 脚本
+
+| 脚本 | 用途 |
+|------|------|
+| `scripts/skvm-aot-compiler.ps1` | AOT 编译器：能力画像 + 环境绑定 + DAG 提取 |
+| `scripts/skvm-variant-generator.ps1` | 变体生成器：从画像生成优化执行计划 |
+| `scripts/skvm-runtime-loader.ps1` | 运行时加载器：执行工作流 + 监控 + 回退 |
+| `scripts/skvm-feedback-collector.ps1` | 反馈收集器：分析日志 + 触发重编译 + 固化 |
+| `SKVM-MANIFEST.json` | 能力清单：声明 5 种能力、6 个探针、DAG 依赖 |
+
+### 运行 SkVM
+
+```powershell
+# AOT 编译（首次使用或环境变化时）
+pwsh -File scripts/skvm-aot-compiler.ps1
+
+# 执行任务（自动加载编译变体）
+pwsh -File scripts/skvm-runtime-loader.ps1 -TaskName init
+pwsh -File scripts/skvm-runtime-loader.ps1 -TaskName query -DryRun
+
+# 反馈分析（检查是否需要重编译）
+pwsh -File scripts/skvm-feedback-collector.ps1
+```
+
+### 向后兼容
+
+若 SkVM 文件不存在（`cache/skvm/` 目录为空），Skill 会回退到直接执行原流程，无需 SkVM 编译。
+
 ## 配置与路径解析
 
 ### 配置优先级
@@ -161,7 +240,19 @@ pwsh -File scripts/create-mod.ps1 -Name "MyMod"
 
 ### 1. 初始化阶段
 
-每次任务开始时：
+每次任务开始时（SkVM 优化流程）：
+```
+1. 检查 cache/skvm/compiled-variant.json 是否存在且未过期
+2. 若无有效变体，运行 skvm-aot-compiler.ps1 进行 AOT 编译
+3. 运行 skvm-runtime-loader.ps1 -TaskName init 执行初始化工作流
+4. 运行时自动按 DAG 顺序执行：
+   - discover: 发现所有路径
+   - acquire-ritsulib / acquire-tutorials / decompile-game: 并行获取资源
+   - build-index: 构建索引
+5. 执行完成后，skvm-feedback-collector.ps1 分析结果并决定是否重编译
+```
+
+**手动初始化（回退模式）**：
 ```
 1. 调用 discover-roots.ps1 发现所有路径
 2. 缺失 RitsuLib 时调用 acquire-ritsulib.ps1
@@ -210,12 +301,20 @@ dotnet build
 ├── ritsulib/                    # RitsuLib 克隆
 ├── tutorials/                   # 教程仓库克隆
 ├── decompiled/sts2/             # 反编译的游戏源码
-└── indexes/                     # 索引文件
-    ├── ritsulib-docs.json
-    ├── ritsulib-api.json
-    ├── sts2-content.json
-    ├── sts2-localization.json
-    └── tutorials.json
+├── indexes/                     # 索引文件
+│   ├── ritsulib-docs.json
+│   ├── ritsulib-api.json
+│   ├── sts2-content.json
+│   ├── sts2-localization.json
+│   └── tutorials.json
+└── skvm/                        # SkVM 运行时数据
+    ├── capability-profile.json  # 环境探针结果
+    ├── compiled-variant.json    # 当前编译变体
+    ├── execution-log.json       # 执行历史日志
+    ├── feedback-report.json     # 反馈分析报告
+    ├── fix-scripts/             # 环境修复脚本
+    ├── variant-history/         # 历史变体（用于回滚）
+    └── solidified/              # 固化的缓存结果
 ```
 
 ## 配置文件格式
