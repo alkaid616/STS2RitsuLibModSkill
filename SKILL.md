@@ -1,3 +1,8 @@
+---
+name: sts2-ritsulib-mod
+description: Build and maintain Slay the Spire 2 RitsuLib mods. Use when working on STS2 mod projects, RitsuLib APIs, Slay the Spire 2 modding, 杀戮尖塔2模组, creating cards, relics, characters, events, monsters, potions, ancients, timelines, enchantments, encounters, patching base-game behavior, querying RitsuLib docs/API, locating original game implementations, or scaffolding RitsuLib mod projects.
+---
+
 # STS2RitsuLibMod Skill
 
 为 Slay the Spire 2 + RitsuLib Mod 开发提供通用的源码发现、获取、索引和查询能力。
