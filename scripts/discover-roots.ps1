@@ -20,7 +20,8 @@
 
 param(
     [ValidateSet("json", "text")]
-    [string]$OutputFormat = "json"
+    [string]$OutputFormat = "json",
+    [string]$ProjectRoot = "."
 )
 
 $ErrorActionPreference = "Stop"
@@ -91,6 +92,30 @@ if (Test-Path $globalConfigPath) {
     }
     if ($globalConfig.localizationLang) {
         $result.localizationLang = $globalConfig.localizationLang
+    }
+}
+
+# 1.5 检查项目级配置 .sts2-mod-builder.json（优先级高于全局配置）
+$projectConfigPath = Join-Path $ProjectRoot ".sts2-mod-builder.json"
+if (Test-Path $projectConfigPath) {
+    Write-Host "[INFO] 读取项目级配置: $projectConfigPath" -ForegroundColor Cyan
+    $projectConfig = Get-Content $projectConfigPath -Raw | ConvertFrom-Json
+
+    if ($projectConfig.gameDll -and $projectConfig.gameDll -ne "" -and (Test-Path $projectConfig.gameDll)) {
+        $result.gameDll = $projectConfig.gameDll
+        $result.sources.gameDll = "project-config"
+    }
+    if ($projectConfig.gameSourceRoot -and $projectConfig.gameSourceRoot -ne "" -and (Test-Path $projectConfig.gameSourceRoot)) {
+        $result.gameSourceRoot = $projectConfig.gameSourceRoot
+        $result.sources.gameSourceRoot = "project-config"
+    }
+    if ($projectConfig.ritsulibRoot -and $projectConfig.ritsulibRoot -ne "" -and (Test-Path $projectConfig.ritsulibRoot)) {
+        $result.ritsulibRoot = $projectConfig.ritsulibRoot
+        $result.sources.ritsulibRoot = "project-config"
+    }
+    if ($projectConfig.tutorialsRoot -and $projectConfig.tutorialsRoot -ne "" -and (Test-Path $projectConfig.tutorialsRoot)) {
+        $result.tutorialsRoot = $projectConfig.tutorialsRoot
+        $result.sources.tutorialsRoot = "project-config"
     }
 }
 
@@ -255,9 +280,13 @@ if (-not $result.gameSourceRoot -and (Test-Path $decompileCache)) {
     }
 }
 
-# 6. 保存发现结果到全局配置
-if ($needSave) {
-    Save-GlobalConfig -GameDll $result.gameDll -GameSourceRoot $result.gameSourceRoot -LocalizationLang $result.localizationLang
+# 6. 保存发现结果到全局配置（包括从项目配置发现的路径）
+$needSaveFromProject = $result.sources.gameSourceRoot -eq "project-config" -or
+                        $result.sources.gameDll -eq "project-config" -or
+                        $result.sources.ritsulibRoot -eq "project-config" -or
+                        $result.sources.tutorialsRoot -eq "project-config"
+if ($needSave -or $needSaveFromProject) {
+    Save-GlobalConfig -GameDll $result.gameDll -GameSourceRoot $result.gameSourceRoot -RitsulibRoot $result.ritsulibRoot -TutorialsRoot $result.tutorialsRoot -LocalizationLang $result.localizationLang
 }
 
 # 输出结果

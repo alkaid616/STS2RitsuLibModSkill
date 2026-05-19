@@ -298,9 +298,16 @@ function Invoke-PrimaryStep {
             $scriptArgs = @{ CacheDir = $cacheDir }
         }
         "decompile-game" {
-            $scriptPath = Join-Path $scriptDir "decompile-sts2.ps1"
-            # 需要从配置中获取 DLL 路径
+            # 用户已提供反编译源码目录时跳过
             $configPath = Join-Path $skillRoot "config.json"
+            if (Test-Path $configPath) {
+                $config = Get-Content $configPath -Raw | ConvertFrom-Json
+                if ($config.gameSourceRoot -and $config.gameSourceRoot -ne "" -and (Test-Path $config.gameSourceRoot)) {
+                    Write-Host "    [SKIP] 用户已提供 gameSourceRoot: $($config.gameSourceRoot)" -ForegroundColor Green
+                    return @{ skipped = $true; reason = "gameSourceRoot provided" }
+                }
+            }
+            $scriptPath = Join-Path $scriptDir "decompile-sts2.ps1"
             if (Test-Path $configPath) {
                 $config = Get-Content $configPath -Raw | ConvertFrom-Json
                 if ($config.gameDll) {
@@ -407,6 +414,42 @@ function Test-RecompilationNeeded {
 }
 
 # ============================================================
+# 自动初始化检查
+# ============================================================
+
+function Test-NeedsInitialization {
+    $indexDir = Join-Path $skillRoot "indexes"
+    $configPath = Join-Path $skillRoot "config.json"
+    $profilePath = Join-Path $skvmDir "capability-profile.json"
+
+    # 检查内置索引是否存在
+    $hasIndexes = $false
+    if (Test-Path $indexDir) {
+        $indexFiles = Get-ChildItem -Path $indexDir -Filter "*.json" -ErrorAction SilentlyContinue
+        $hasIndexes = $indexFiles.Count -gt 0
+    }
+
+    # 检查配置是否有有效值
+    $hasConfig = $false
+    if (Test-Path $configPath) {
+        $config = Get-Content $configPath -Raw | ConvertFrom-Json
+        $hasConfig = ($config.gameDll -and $config.gameDll -ne "") -or
+                     ($config.gameSourceRoot -and $config.gameSourceRoot -ne "") -or
+                     ($config.ritsulibRoot -and $config.ritsulibRoot -ne "")
+    }
+
+    # 检查缓存目录是否有内容
+    $hasCache = $false
+    $ritsulibCache = Join-Path $skillRoot "cache" "ritsulib"
+    $tutorialsCache = Join-Path $skillRoot "cache" "tutorials"
+    $decompileCache = Join-Path $skillRoot "cache" "decompiled" "sts2"
+    $hasCache = (Test-Path $ritsulibCache) -or (Test-Path $tutorialsCache) -or (Test-Path $decompileCache)
+
+    # 如果索引不存在且没有缓存和配置，需要初始化
+    return (-not $hasIndexes -and -not $hasConfig -and -not $hasCache)
+}
+
+# ============================================================
 # 主流程
 # ============================================================
 
@@ -414,6 +457,20 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  SkVM 运行时加载器" -ForegroundColor Cyan
 Write-Host "  任务: $TaskName" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan
+
+# 自动初始化检查
+if (Test-NeedsInitialization) {
+    Write-Host "[AUTO-INIT] 检测到首次使用，自动执行初始化..." -ForegroundColor Yellow
+    $initScript = Join-Path $scriptDir "init-skill.ps1"
+    if (Test-Path $initScript) {
+        & $initScript -ProjectRoot $ProjectRoot
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[WARN] 自动初始化未完全成功，继续执行..." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[WARN] 初始化脚本不存在: $initScript" -ForegroundColor Yellow
+    }
+}
 
 # 加载变体
 $variant = Load-Variant -Path $VariantPath

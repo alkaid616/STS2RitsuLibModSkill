@@ -118,12 +118,23 @@ pwsh -File scripts/skvm-feedback-collector.ps1
 ### 配置优先级
 
 ```
-1. Skill 全局配置 config.json
-2. 缓存目录中已有的资源
-3. 自动发现 Steam 安装目录
-4. 自动拉取 RitsuLib 和教程仓库
-5. 自动反编译游戏 DLL
+1. 项目级配置 .sts2-mod-builder.json（Mod 项目根目录）
+2. Skill 全局配置 config.json
+3. 缓存目录中已有的资源
+4. 自动发现 Steam 安装目录
+5. 自动拉取 RitsuLib 和教程仓库
+6. 自动反编译游戏 DLL（仅当未提供 gameSourceRoot 时）
 ```
+
+### 自动初始化
+
+首次使用时（检测到无索引、无配置、无缓存），Skill 会自动执行完整初始化流程：
+1. 发现路径（全局配置 → 项目配置 → 自动发现）
+2. 获取 RitsuLib 和教程仓库
+3. 反编译游戏 DLL（如未提供 `gameSourceRoot`）
+4. 构建索引
+
+用户可通过提供 `gameSourceRoot` 跳过反编译步骤。
 
 ### 全局配置文件
 
@@ -159,7 +170,8 @@ pwsh -File scripts/skvm-feedback-collector.ps1
 
 ## 游戏源码获取
 
-- 自动读取 Steam 注册表和 `libraryfolders.vdf`，查找 app `2868840` 的安装目录
+- 若用户已在 `config.json` 或 `.sts2-mod-builder.json` 中提供 `gameSourceRoot`，直接使用，跳过反编译
+- 否则自动读取 Steam 注册表和 `libraryfolders.vdf`，查找 app `2868840` 的安装目录
 - 定位 `data_sts2_windows_x86_64\sts2.dll`
 - 无现成源码时用 ILSpy CLI 反编译：`ilspycmd -p -o <output> <sts2.dll>`
 - 输出到缓存目录，不写入游戏目录
@@ -245,16 +257,21 @@ pwsh -File scripts/create-mod.ps1 -Name "MyMod"
 
 ### 1. 初始化阶段
 
+**自动初始化（首次使用）**：运行时加载器会自动检测是否需要初始化（无索引、无配置、无缓存），若需要则自动运行 `init-skill.ps1`。
+
 每次任务开始时（SkVM 优化流程）：
 ```
-1. 检查 cache/skvm/compiled-variant.json 是否存在且未过期
-2. 若无有效变体，运行 skvm-aot-compiler.ps1 进行 AOT 编译
-3. 运行 skvm-runtime-loader.ps1 -TaskName init 执行初始化工作流
-4. 运行时自动按 DAG 顺序执行：
-   - discover: 发现所有路径
-   - acquire-ritsulib / acquire-tutorials / decompile-game: 并行获取资源
+1. 检测是否为首次使用（无 indexes/、无 config.json 有效值、无 cache/）
+2. 若为首次使用，自动运行 init-skill.ps1 执行完整初始化
+3. 检查 cache/skvm/compiled-variant.json 是否存在且未过期
+4. 若无有效变体，运行 skvm-aot-compiler.ps1 进行 AOT 编译
+5. 运行 skvm-runtime-loader.ps1 -TaskName init 执行初始化工作流
+6. 运行时自动按 DAG 顺序执行：
+   - discover: 发现所有路径（支持项目级 .sts2-mod-builder.json）
+   - acquire-ritsulib / acquire-tutorials: 并行获取资源
+   - decompile-game: 反编译游戏（若已提供 gameSourceRoot 则自动跳过）
    - build-index: 构建索引
-5. 执行完成后，skvm-feedback-collector.ps1 分析结果并决定是否重编译
+7. 执行完成后，skvm-feedback-collector.ps1 分析结果并决定是否重编译
 ```
 
 **手动初始化（回退模式）**：
@@ -297,6 +314,8 @@ dotnet build
 - **不提交反编译源码到 Mod 项目**
 - **不把反编译源码复制进 Mod 项目**
 - **用户路径优先于自动发现**
+- **用户提供 gameSourceRoot 时跳过反编译**
+- **首次使用自动初始化**
 - **索引轻量化，源码按需读取**
 
 ## 缓存目录结构
