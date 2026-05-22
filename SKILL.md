@@ -291,13 +291,43 @@ pwsh -File scripts/create-mod.ps1 -Name "MyMod"
 - **教程参考**：用户需要学习 Mod 开发时，查询相关教程
 - **Patch 目标**：需要修改原版行为时，读取目标方法和调用方
 
-### 3. 编码阶段
+### 3. 本地化键生成规则
+
+生成 RitsuLib 公开 Entry / owned id stem 时，必须复刻游戏 `StringHelper.Slugify` 规则：
+
+```text
+1. Trim
+2. Regex.Replace(value, "([A-Za-z0-9]|\\G(?!^))([A-Z])", "$1_$2")
+3. ToUpperInvariant
+4. Regex.Replace(value, "\\s+", "_")
+5. Regex.Replace(value, "[^A-Z0-9_]", "")
+```
+
+该规则适用于 mod id、模型类型名、stable entry stem、full public entry、owned keyword stem、card pile id、
+top-bar button id、card tag id，以及虚拟 `I18N` `LocTable` table id。
+
+普通 `I18N` JSON key 保持原样，不使用该规则；例如 `settings.enabled` 仍然是 `settings.enabled`。
+
+边界例子：
+
+| 输入 | 输出 |
+| --- | --- |
+| `HTTPServer2Card` | `H_TT_P_SERVER2_CARD` |
+| `XML2Reader` | `X_M_L2_READER` |
+| `XMLReader` | `X_ML_READER` |
+| `MyMod` | `MY_MOD` |
+| `my-mod` | `MYMOD` |
+
+生成卡牌、遗物、关键词、card pile、top-bar button 等本地化 key 时，先用上表规则得到 stem，再拼接 RitsuLib
+约定的中间段和后缀，例如 `{MOD}_CARD_{TYPE_STEM}.title`、`{MOD}_KEYWORD_{STEM}.description`。
+
+### 4. 编码阶段
 
 - 优先使用 RitsuLib 的内容注册、模板、生命周期、本地化、存档、设置和 patching API
 - 只有 RitsuLib/原生 API 无稳定入口时才写 Harmony patch
 - patch 前必须读取目标方法和调用方
 
-### 4. 构建验证
+### 5. 构建验证
 
 ```powershell
 dotnet build
